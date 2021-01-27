@@ -1,8 +1,11 @@
-import minimist from 'minimist';
+import fs from 'fs';
 
-import { Arguments, compress, isResizeFilter, RESIZE_FILTERS } from '.';
+import minimist from 'minimist';
+import sharp from 'sharp';
+
+import { compress, isResizeFilter, Options, RESIZE_FILTERS } from '.';
 import { COMPRESSION_FORMATS, isCompressionFormat } from './format';
-import { isQualityLevel, QUALITY_LEVELS } from './quality';
+import { Image, MipmapValidationError, validateMipmapMetadata } from './image';
 
 const formatList = (list: readonly string[], indent: number) =>
     list.map(format => `${' '.repeat(indent)}${format}`).join('\n');
@@ -21,9 +24,8 @@ ${formatList(COMPRESSION_FORMATS, 12)}
         Use sRGB color space if available for format.
 
     --quality QUALITY
-        Specify quality-performance tradeoff. Available presets are:
-
-${QUALITY_LEVELS.map(format => `            ${format}`).join('\n')}
+        A float value between 0 (fastest) and 100 (best quality) controlling the
+        quality vs performance trade-off.
 
     --mipmaps
         Enable generation of mipmap levels.
@@ -49,7 +51,7 @@ ${RESIZE_FILTERS.map(format => `            ${format}`).join('\n')}
         Print usage information.
 `;
 
-function parseArguments(argv: string[]): Arguments {
+function parseArguments(argv: string[]): [input: string[], output: string, options: Options] {
     if (argv.length === 0) {
         console.log(help());
         process.exit(0);
@@ -83,7 +85,7 @@ function parseArguments(argv: string[]): Arguments {
     const input = files.slice(0, -1);
     const [output] = files.slice(-1);
 
-    const { format, srgb, quality, mipmaps, filter, pot, square, yflip, verbose } = args;
+    const { format, srgb, mipmaps, filter, pot, square, yflip, verbose } = args;
 
     if (format === undefined) {
         throw new Error('Missing compression format');
@@ -92,36 +94,65 @@ function parseArguments(argv: string[]): Arguments {
         throw new Error(`Not a valid compression format: ${format}`);
     }
 
-    if (quality !== undefined && !isQualityLevel(quality)) {
-        throw new Error(`Not a valid quality level: ${quality}`);
-    }
-
     if (filter !== undefined && !isResizeFilter(filter)) {
         throw new Error(`Not a valid resize filter format: ${filter}`);
     }
 
+    let { quality } = args;
+    if (quality !== undefined) {
+        quality = Number.parseFloat(quality);
+        if (quality === NaN || quality < 0 || quality > 100) {
+            throw new Error(`Not a valid quality value: ${args.quality}`);
+        }
+    }
+
     const flags = args['--'];
 
-    return {
+    return [
         input,
         output,
-        format,
-        srgb,
-        quality,
-        mipmaps,
-        filter,
-        pot,
-        square,
-        yflip,
-        verbose,
-        flags,
-    };
+        { format, srgb, quality, mipmaps, filter, pot, square, yflip, verbose, flags },
+    ];
+}
+
+async function loadInputImages(files: string[]): Promise<Image[]> {
+    const extract = (m: sharp.Metadata) => ({
+        width: m.width ?? 0,
+        height: m.height ?? 0,
+        channels: m.channels ?? 0,
+    });
+    const metadata = await Promise.all(files.map(file => sharp(file).metadata().then(extract)));
+
+    try {
+        validateMipmapMetadata(metadata);
+    } catch (error) {
+        if (error instanceof MipmapValidationError) {
+            throw new Error(`Level ${error.level} image ${files[error.level]}: ${error.reason}`);
+        }
+        throw error;
+    }
+
+    // target colorspace
+    const { channels } = metadata[0];
+    const colorspace = channels < 2 ? 'b-w' : 'srgb';
+
+    return await Promise.all(
+        files.map((file, index) =>
+            sharp(file)
+                .toColorspace(colorspace)
+                .raw()
+                .toBuffer()
+                .then(data => ({ ...metadata[index], data }))
+        )
+    );
 }
 
 async function main() {
     try {
-        const args = parseArguments(process.argv.slice(2));
-        await compress(args);
+        const [input, output, options] = parseArguments(process.argv.slice(2));
+        const inputImages = await loadInputImages(input);
+        const ktx = await compress(inputImages, options);
+        fs.promises.writeFile(output, ktx.buffer);
     } catch (e) {
         console.log(`${e}`);
         process.exit(1);

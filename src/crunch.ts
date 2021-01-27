@@ -1,22 +1,29 @@
 import { getBinPath } from './bin-path';
 import { CompressionFormat, isETC1Format, isETC2Format, isS3TCFormat } from './format';
-import { loadKTXImageData } from './ktx';
-import { QualityLevel } from './quality';
+import { loadKTX } from './ktx';
 import { spawnProcess, SpawnProcessOptions } from './spawn-process';
 import { CompressionTool, registerCompressionTool } from './tool';
 
-const crunchQuality: Record<QualityLevel, string> = {
-    fastest: 'superfast',
-    fast: 'fast',
-    medium: 'normal',
-    thorough: 'better',
-    exhaustive: 'uber',
-};
+function getQualityProfileName(value: number): string {
+    if (value <= 0) {
+        return 'superfast';
+    }
+    if (value <= 25) {
+        return 'fast';
+    }
+    if (value <= 50) {
+        return 'normal';
+    }
+    if (value <= 75) {
+        return 'better';
+    }
+    return 'uber';
+}
 
 function crunch(
     format: CompressionFormat,
     _srgb: boolean,
-    quality: QualityLevel,
+    quality: number,
     flags: string[] = []
 ): CompressionTool | undefined {
     if (!isETC1Format(format) && !isETC2Format(format) && !isS3TCFormat(format)) {
@@ -30,7 +37,7 @@ function crunch(
         'ktx',
         `-${format}`,
         '-dxtQuality',
-        crunchQuality[quality],
+        getQualityProfileName(quality),
         ...flags,
     ];
 
@@ -42,9 +49,12 @@ function crunch(
         const file = `${output}.ktx`;
         await spawnProcess(bin, ['-file', input, '-out', file, ...args], spawnOptions);
 
-        const data = await loadKTXImageData(file);
+        const ktx = await loadKTX(file, { mipmapStart: 0, mipmapEnd: 1, keyValuePairs: false });
+        if (ktx.imageData.length !== 1) {
+            throw new Error('Failed reading crunch output');
+        }
 
-        return { file, data };
+        return { file, data: ktx.imageData[0] };
     };
 }
 

@@ -5,14 +5,16 @@ import path from 'path';
 import sharp from 'sharp';
 
 import { CompressionFormat } from './format';
-import { storeKTX } from './ktx';
-import { QualityLevel } from './quality';
+import { KTXContainer, storeKTX } from './ktx';
 import { findCompressionTool } from './tool';
-import { previousPowerOfTwo, toArray } from './util';
+import { nextMipmapLevel, previousPowerOfTwo } from './util';
 
 // register compression tools
 import './astcenc';
 import './crunch';
+import { Image, validateImage, validateImageData, validateMipmapMetadata } from './image';
+
+export { CompressionFormat };
 
 export const RESIZE_FILTERS: (keyof sharp.KernelEnum)[] = [
     'nearest',
@@ -26,43 +28,15 @@ export function isResizeFilter(format: string): format is ResizeFilter {
     return RESIZE_FILTERS.includes(format as ResizeFilter);
 }
 
-export type Arguments = {
-    input: string | string[];
-    output: string;
-    format: CompressionFormat;
-    srgb?: boolean;
-    quality?: QualityLevel;
-    mipmaps?: boolean | number;
-    filter?: ResizeFilter;
-    pot?: boolean;
-    square?: boolean;
-    yflip?: boolean;
-    verbose?: boolean;
-    flags?: string[];
-};
-
-type MipmapData = { width: number; height: number; data: Buffer[] };
-
 async function generateMipmapData(
-    file: string,
-    mipmaps: boolean | number,
+    input: Image,
     filter: keyof sharp.KernelEnum,
     pot: boolean,
     square: boolean,
-    yflip: boolean
-): Promise<MipmapData> {
-    const metadata = await sharp(file).metadata();
-    const { width: sourceWidth, height: sourceHeight, channels } = metadata;
-
-    if (!sourceWidth || !sourceHeight) {
-        throw new Error(`Source image ${file} has invalid size`);
-    }
-    if (!channels) {
-        throw new Error(`Source image ${file} has invalid number of color channels`);
-    }
-
-    let width = sourceWidth;
-    let height = sourceHeight;
+    maxLevel: number = Number.MAX_VALUE
+): Promise<Image[]> {
+    let width = Math.max(1, Math.floor(input.width));
+    let height = Math.max(1, Math.floor(input.height));
 
     // square?
     if (square) {
@@ -79,137 +53,81 @@ async function generateMipmapData(
         height = previousPowerOfTwo(height);
     }
 
-    const sharedPipeline = sharp(file);
+    // calculate dimensions of individual mipmap levels to generate
+    const dimensions: [width: number, height: number][] = [];
+    for (let level = 0; level < maxLevel; ++level) {
+        dimensions.push([width, height]);
 
+        if (width === 1 && height === 1) {
+            break;
+        }
+
+        width = nextMipmapLevel(width);
+        height = nextMipmapLevel(height);
+    }
+
+    const pipeline = sharp(input.data, { raw: input as sharp.Raw });
+
+    const { channels } = input;
     if (channels < 2) {
-        sharedPipeline.toColorspace('b-w');
+        pipeline.toColorspace('b-w');
     }
 
-    sharedPipeline.raw();
+    pipeline.raw();
 
-    if (yflip) {
-        sharedPipeline.flip(true);
-    }
-
-    let levels = Number.MAX_VALUE;
-    if (typeof mipmaps === 'number') {
-        levels = mipmaps;
-    } else if (typeof mipmaps === 'boolean') {
-        if (!mipmaps) {
-            levels = 1;
-        }
-    }
-
-    let levelWidth = width;
-    let levelHeight = height;
-
-    const tasks = [];
-
-    for (;;) {
-        tasks.push(
-            sharedPipeline
+    return Promise.all(
+        dimensions.map(([width, height]) =>
+            pipeline
                 .clone()
-                .resize(levelWidth, levelHeight, { kernel: filter })
-                .png()
+                .resize(width, height, { kernel: filter })
                 .toBuffer()
-        );
-        if (levels === 1) {
-            break;
-        }
-        if (levelWidth === 1 && levelHeight === 1) {
-            break;
-        }
-        levels--;
-        levelWidth = Math.max(1, Math.floor(levelWidth / 2));
-        levelHeight = Math.max(1, Math.floor(levelHeight / 2));
-    }
-
-    const data = await Promise.all(tasks);
-
-    return { width, height, data };
+                .then(data => ({ width, height, channels, data }))
+        )
+    );
 }
 
-async function loadMipmapData(files: string[]): Promise<MipmapData> {
-    if (files.length === 0) {
-        throw new Error('No input files given');
-    }
+export type Options = {
+    format: CompressionFormat;
+    srgb?: boolean;
+    quality?: number;
+    mipmaps?: boolean | number;
+    filter?: ResizeFilter;
+    pot?: boolean;
+    square?: boolean;
+    yflip?: boolean;
+    verbose?: boolean;
+    flags?: string[];
+};
 
-    const metadata = await Promise.all(files.map(file => sharp(file).metadata()));
-    const { width, height, channels } = metadata[0];
-
-    if (!width || !height) {
-        throw new Error(`Level 0 image ${files[0]} has invalid size`);
-    }
-    if (!channels) {
-        throw new Error(`Level 0 image ${files[0]} has invalid number of color channels`);
-    }
-
-    // validate input images
-    let levelWidth = width;
-    let levelHeight = height;
-    for (let i = 1; i < metadata.length; ++i) {
-        levelWidth = Math.max(1, Math.floor(levelWidth / 2));
-        levelHeight = Math.max(1, Math.floor(levelHeight / 2));
-
-        const level = metadata[i];
-
-        if (level.width !== levelWidth || level.height !== levelHeight) {
-            throw new Error(`Level ${i} image ${files[i]} has invalid size: ${level.width}x${level.height} (expected: ${levelWidth}x${levelHeight})`);
-        }
-
-        if (level.channels !== channels) {
-            throw new Error(`Level ${i} image ${files[i]} has different number of color channels: ${level.channels} (expected: ${channels})`);
-        }
-    }
-
-    const data = await Promise.all(files.map(file => {
-        const pipeline = sharp(file);
-        if (channels < 2) {
-            pipeline.toColorspace('b-w');
-        }
-        return pipeline.png().toBuffer();
-    }));
-
-    return { width, height, data };
-}
-
-export async function compress(args: Arguments): Promise<void> {
-    const input = toArray(args.input).filter(Boolean);
+export async function compress(
+    input: Image[],
+    options: Options
+): Promise<{ container: KTXContainer; buffer: Buffer }> {
     if (input.length === 0) {
-        throw new Error('No input file given');
+        throw new Error('No input image given');
     }
-    const { output } = args;
-    if (output.length === 0) {
-        throw new Error('No output file given');
-    }
+    validateImage(input[0]);
 
-    // default image options
-    const {
-        mipmaps = true,
-        filter = 'lanczos3',
-        pot = false,
-        square = false,
-        yflip = false,
-    } = args;
+    const { format, srgb = false, quality = 60 } = options;
 
-    let width;
-    let height;
-    let uncompressedData: Buffer[];
-
+    // generate input according to options
     if (input.length === 1) {
-        ({ width, height, data: uncompressedData } = await generateMipmapData(
-            input[0],
-            mipmaps,
-            filter,
-            pot,
-            square,
-            yflip
-        ));
-    } else {
-        ({ width, height, data: uncompressedData } = await loadMipmapData(input));
-    }
+        const { filter = 'lanczos3', pot = false, square = false } = options;
 
-    const { format, srgb = false, quality = 'medium' } = args;
+        let maxLevel = undefined;
+        if (typeof options.mipmaps === 'number') {
+            maxLevel = Math.max(0, options.mipmaps);
+        } else if (typeof options.mipmaps === 'boolean' && !options.mipmaps) {
+            maxLevel = 1;
+        }
+
+        input = await generateMipmapData(input[0], filter, pot, square, maxLevel);
+    }
+    // if multiple input buffers are given use those without modification
+    else {
+        validateMipmapMetadata(input);
+        input.forEach(validateImageData);
+    }
 
     // find the right tool for the job
     const compress = findCompressionTool(format, false, quality);
@@ -217,17 +135,27 @@ export async function compress(args: Arguments): Promise<void> {
         throw new Error(`Unsupported compression format: ${format}`);
     }
 
+    const { yflip = false } = options;
     const tmpDir = await fs.promises.mkdtemp(`${os.tmpdir()}${path.sep}`);
+    const spawnOptions = { verbose: options.verbose ?? false };
 
-    const options = { verbose: false };
-
-    const compressedData = await Promise.all(
-        uncompressedData.map(async (mipdata, index) => {
+    const compressed = await Promise.all(
+        input.map(async (image, index) => {
+            // write to temporary png file, y-flip if need be
             const inputFile = `${tmpDir}${path.sep}input${index}.png`;
-            await fs.promises.writeFile(inputFile, mipdata);
+            await sharp(image.data, { raw: image as sharp.Raw })
+                .toColorspace(image.channels < 2 ? 'b-w' : 'srgb')
+                .flip(yflip)
+                .png()
+                .toFile(inputFile);
 
+            // compress to temporary file
             const outputFileBase = `${tmpDir}${path.sep}output${index}`;
-            const { file: outputFile, data } = await compress(inputFile, outputFileBase, options);
+            const { file: outputFile, data } = await compress(
+                inputFile,
+                outputFileBase,
+                spawnOptions
+            );
 
             await Promise.all([fs.promises.rm(inputFile), fs.promises.rm(outputFile)]);
 
@@ -237,7 +165,8 @@ export async function compress(args: Arguments): Promise<void> {
 
     await fs.promises.rmdir(tmpDir);
 
-    const ktx = storeKTX({ width, height, format, srgb, yflip, data: compressedData });
+    const { width, height } = input[0];
+    const ktx = storeKTX({ width, height, format, srgb, yflip, data: compressed });
 
-    await fs.promises.writeFile(output, ktx);
+    return ktx;
 }

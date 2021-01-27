@@ -1,8 +1,7 @@
-import { CompressionFormat } from "./format";
-import { QualityLevel } from "./quality";
-import { SpawnProcessOptions } from "./spawn-process";
+import { CompressionFormat } from './format';
+import { SpawnProcessOptions } from './spawn-process';
 
-export type CompressionToolOutput = { file: string, data: Buffer };
+export type CompressionToolOutput = { file: string; data: Buffer };
 
 export type CompressionTool = (
     input: string,
@@ -13,7 +12,7 @@ export type CompressionTool = (
 export type CompressionToolFactoryFunction = (
     format: CompressionFormat,
     srgb: boolean,
-    quality: QualityLevel,
+    quality: number,
     flags?: string[]
 ) => CompressionTool | undefined;
 
@@ -26,7 +25,7 @@ export function registerCompressionTool(name: string, factory: CompressionToolFa
 export function findCompressionTool(
     format: CompressionFormat,
     srgb: boolean,
-    quality: QualityLevel,
+    quality: number,
     flags?: string[]
 ): CompressionTool | undefined {
     for (const [, factory] of registeredTools) {
@@ -37,17 +36,3 @@ export function findCompressionTool(
     }
     return undefined;
 }
-
-
-
-// export interface CompressionTool {
-//     compress(input: string, output: string, spawnOptions?: Partial<SpawnProcessOptions>): Promise<void>;
-//     readOutput(file: string): Promise<Buffer>;
-// }
-
-// export type CompressionToolFactoryFunction = (
-//     format: CompressionFormat,
-//     srgb: boolean,
-//     quality: QualityLevel,
-//     flags?: string[]
-// ) => CompressionTool | undefined;

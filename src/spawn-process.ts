@@ -1,13 +1,13 @@
 import { spawn } from 'child_process';
 
 export interface SpawnProcessOptions {
-  verbose: boolean;
+    verbose: boolean;
 }
 
 export function spawnProcess(
-  command: string,
-  args: string[] = [],
-  options: Partial<SpawnProcessOptions> = {}
+    command: string,
+    args: string[] = [],
+    options: Partial<SpawnProcessOptions> = {}
 ): Promise<void> {
     const { verbose = false } = options;
 

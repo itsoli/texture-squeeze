@@ -21,6 +21,6 @@ export function calcNumMipmapLevels(width: number, height: number, depth: number
     return 1 + Math.floor(Math.log2(Math.max(width, height, depth)));
 }
 
-export function toArray<T>(x: T | T[]): T[] {
-    return Array.isArray(x) ? x : [x];
+export function nextMipmapLevel(dimension: number): number {
+    return Math.max(1, Math.floor(dimension / 2));
 }

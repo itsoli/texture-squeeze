@@ -5,7 +5,7 @@ const ASTC_MAGIC_ID = 0x5ca1ab13;
 const ASTC_HEADER_LENGTH = 4 + 1 * 3 + 3 * 3;
 
 function unpackBytes(a: number, b: number, c: number, d: number): number {
-	return a | (b << 8) | (c << 16) | (d << 24);
+    return a | (b << 8) | (c << 16) | (d << 24);
 }
 
 export type ASTCContainer = {
@@ -35,7 +35,12 @@ export async function loadASTC(path: string): Promise<ASTCContainer> {
     let offset = 0;
 
     // check file magic id
-    const magic = unpackBytes(header[offset++], header[offset++], header[offset++], header[offset++]);
+    const magic = unpackBytes(
+        header[offset++],
+        header[offset++],
+        header[offset++],
+        header[offset++]
+    );
     if (magic !== ASTC_MAGIC_ID) {
         throw new Error(`Invalid ASTC magic id: ${path}`);
     }
@@ -56,9 +61,9 @@ export async function loadASTC(path: string): Promise<ASTCContainer> {
     }
 
     // calculate number of blocks per dimension
-	const xBlocks = Math.floor((dimX + blockX - 1) / blockX);
-	const yBlocks = Math.floor((dimY + blockY - 1) / blockX);
-	const zBlocks = Math.floor((dimZ + blockZ - 1) / blockZ);
+    const xBlocks = Math.floor((dimX + blockX - 1) / blockX);
+    const yBlocks = Math.floor((dimY + blockY - 1) / blockX);
+    const zBlocks = Math.floor((dimZ + blockZ - 1) / blockZ);
 
     // expected data chunk size
     const dataSize = xBlocks * yBlocks * zBlocks * 16;

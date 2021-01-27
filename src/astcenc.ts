@@ -1,14 +1,29 @@
 import { loadASTC } from './astc';
 import { getBinPath } from './bin-path';
 import { CompressionFormat, isASTCFormat } from './format';
-import { QualityLevel } from './quality';
 import { spawnProcess, SpawnProcessOptions } from './spawn-process';
 import { CompressionTool, registerCompressionTool } from './tool';
+
+function getQualityProfileName(value: number): string {
+    if (value <= 0) {
+        return 'fastest';
+    }
+    if (value <= 10) {
+        return 'fast';
+    }
+    if (value <= 60) {
+        return 'medium';
+    }
+    if (value <= 98) {
+        return 'thorough';
+    }
+    return 'exhaustive';
+}
 
 function astcenc(
     format: CompressionFormat,
     srgb: boolean,
-    quality: QualityLevel,
+    quality: number,
     flags: string[] = []
 ): CompressionTool | undefined {
     if (!isASTCFormat(format)) {
@@ -24,7 +39,7 @@ function astcenc(
         // block size
         format.slice(5),
         // quality preset
-        `-${quality}`,
+        `-${getQualityProfileName(quality)}`,
         // additional argument flags
         ...flags,
     ];

@@ -23,7 +23,7 @@ function compress(file, format, quality) {
     });
 }
 
-const quality = 'exhaustive';
+const quality = 50;
 
 compress('backstein.jpg', 'ASTC_4x4',  quality);
 compress('backstein.jpg', 'ETC1',  quality);
