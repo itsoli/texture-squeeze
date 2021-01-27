@@ -1,35 +1,52 @@
-const { exec } = require('child_process');
-
-process.chdir(__dirname);
-
-const command = `node ../bin/texture-squeeze.js`;
+const { spawn } = require('child_process');
 
 function compress(file, format, quality) {
-    const args = `--format ${format} ${file} ${file.split('.')[0]}-${format}.ktx --quality ${quality} --mipmaps --yflip`;
-    const label = `texture-squeeze ${args}`;
-    console.time(label);
-    exec(`${command} ${args}`, (error, stdout, stderr) => {
-        console.timeEnd(label);
-        // if (error) {
-        //     console.error(`exec error: ${error}`);
-        //     return;
-        // }
-        if (stdout) {
-            console.log(`${stdout}`);
-        }
-        if (stderr) {
-            console.log(`${stderr}`);
-        }
+    return new Promise((resolve, reject) => {
+        const args = [
+            '--format', format,
+            file,
+            `${file.split('.')[0]}-${format}.ktx`,
+            '--quality', quality,
+            '--mipmaps',
+            '--yflip',
+            '--verbose',
+        ];
+
+        const label = `texture-squeeze ${args.join(' ')}`;
+        console.time(label);
+
+        const proc = spawn('node', ['../bin/texture-squeeze.js', ...args], { cwd: __dirname });
+
+        proc.stdout.on('data', data => {
+            process.stdout.write(data);
+        });
+
+        proc.stderr.on('data', data => {
+            process.stderr.write(data);
+        });
+
+        proc.on('close', code => {
+            console.timeEnd(label);
+            if (code === 0) {
+                resolve();
+            } else {
+                reject();
+            }
+        });
+
+        proc.on('error', reject);
     });
 }
 
-const quality = 50;
+const tasks = [
+    ['backstein.jpg', 'ASTC_4x4', 50],
+    ['backstein.jpg', 'ETC1', 50],
+    ['backstein.jpg', 'ETC2', 50],
+    ['backstein.jpg', 'DXT1', 50],
 
-compress('backstein.jpg', 'ASTC_4x4',  quality);
-compress('backstein.jpg', 'ETC1',  quality);
-compress('backstein.jpg', 'ETC2',  quality);
-compress('backstein.jpg', 'DXT1',  quality);
+    ['moewe.png', 'ASTC_4x4', 50],
+    ['moewe.png', 'ETC2A', 50],
+    ['moewe.png', 'DXT5', 50],
+];
 
-compress('moewe.png', 'ASTC_4x4',  quality);
-compress('moewe.png', 'ETC2A',  quality);
-compress('moewe.png', 'DXT5',  quality);
+tasks.reduce((p, task) => p.then(() => compress(...task)) , Promise.resolve());

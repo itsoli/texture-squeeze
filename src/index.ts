@@ -28,6 +28,19 @@ export function isResizeFilter(format: string): format is ResizeFilter {
     return RESIZE_FILTERS.includes(format as ResizeFilter);
 }
 
+export type Options = {
+    format: CompressionFormat;
+    srgb?: boolean;
+    quality?: number;
+    mipmaps?: boolean | number;
+    filter?: ResizeFilter;
+    pot?: boolean;
+    square?: boolean;
+    yflip?: boolean;
+    verbose?: boolean;
+    flags?: string[];
+};
+
 async function generateMipmapData(
     input: Image,
     filter: keyof sharp.KernelEnum,
@@ -86,19 +99,6 @@ async function generateMipmapData(
     );
 }
 
-export type Options = {
-    format: CompressionFormat;
-    srgb?: boolean;
-    quality?: number;
-    mipmaps?: boolean | number;
-    filter?: ResizeFilter;
-    pot?: boolean;
-    square?: boolean;
-    yflip?: boolean;
-    verbose?: boolean;
-    flags?: string[];
-};
-
 export async function compress(
     input: Image[],
     options: Options
@@ -135,36 +135,37 @@ export async function compress(
         throw new Error(`Unsupported compression format: ${format}`);
     }
 
-    const { yflip = false } = options;
+    // create uniquely named temporary directory
     const tmpDir = await fs.promises.mkdtemp(`${os.tmpdir()}${path.sep}`);
+
+    const { yflip = false } = options;
     const spawnOptions = { verbose: options.verbose ?? false };
+    const compressed: Buffer[] = [];
 
-    const compressed = await Promise.all(
-        input.map(async (image, index) => {
-            // write to temporary png file, y-flip if need be
-            const inputFile = `${tmpDir}${path.sep}input${index}.png`;
-            await sharp(image.data, { raw: image as sharp.Raw })
-                .toColorspace(image.channels < 2 ? 'b-w' : 'srgb')
-                .flip(yflip)
-                .png()
-                .toFile(inputFile);
+    // compression is intentionally executed in sequence to let the individual tools do parallelization on their own
+    for (const [index, image] of input.entries()) {
+        // write to temporary png file, y-flip if need be
+        const inputFile = `${tmpDir}${path.sep}input${index}.png`;
+        await sharp(image.data, { raw: image as sharp.Raw })
+            .toColorspace(image.channels < 2 ? 'b-w' : 'srgb')
+            .flip(yflip)
+            .png()
+            .toFile(inputFile);
 
-            // compress to temporary file
-            const outputFileBase = `${tmpDir}${path.sep}output${index}`;
-            const { file: outputFile, data } = await compress(
-                inputFile,
-                outputFileBase,
-                spawnOptions
-            );
+        // compress to temporary file
+        const outputFileBase = `${tmpDir}${path.sep}output${index}`;
+        const { file: outputFile, data } = await compress(inputFile, outputFileBase, spawnOptions);
 
-            await Promise.all([fs.promises.rm(inputFile), fs.promises.rm(outputFile)]);
+        // remove temporary input/output files
+        await Promise.allSettled([inputFile, outputFile].map(fs.promises.unlink));
 
-            return data;
-        })
-    );
+        compressed.push(data);
+    }
 
-    await fs.promises.rmdir(tmpDir);
+    // clean up temp dir
+    await fs.promises.rmdir(tmpDir, { recursive: true });
 
+    // layout output as ktx
     const { width, height } = input[0];
     const ktx = storeKTX({ width, height, format, srgb, yflip, data: compressed });
 
