@@ -49,4 +49,4 @@ const tasks = [
     ['moewe.png', 'DXT5', 50],
 ];
 
-tasks.reduce((p, task) => p.then(() => compress(...task)) , Promise.resolve());
+tasks.reduce((p, task) => p.then(() => compress(...task)).catch(() => {}) , Promise.resolve());

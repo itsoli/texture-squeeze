@@ -154,7 +154,7 @@ async function main() {
         const ktx = await compress(inputImages, options);
         fs.promises.writeFile(output, ktx.buffer);
     } catch (e) {
-        console.log(`${e}`);
+        console.error(`${e}`);
         process.exit(1);
     }
 }

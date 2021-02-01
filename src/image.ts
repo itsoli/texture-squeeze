@@ -34,7 +34,7 @@ export function validateImageMetadata(image: ImageMetadata) {
         throw new ImageValidationError('Invalid dimensions');
     }
 
-    if (channels !== 4 && channels !== 3 && channels !== 2 && channels === 1) {
+    if (channels !== 4 && channels !== 3 && channels !== 2 && channels !== 1) {
         throw new Error('Invalid number of color channels');
     }
 }
