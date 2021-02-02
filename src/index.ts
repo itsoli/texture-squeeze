@@ -30,7 +30,6 @@ export function isResizeFilter(format: string): format is ResizeFilter {
 
 export type Options = {
     format: CompressionFormat;
-    srgb?: boolean;
     quality?: number;
     mipmaps?: boolean | number;
     filter?: ResizeFilter;
@@ -108,7 +107,7 @@ export async function compress(
     }
     validateImage(input[0]);
 
-    const { format, srgb = false, quality = 60 } = options;
+    const { format, quality = 60 } = options;
 
     // generate input according to options
     if (input.length === 1) {
@@ -130,7 +129,7 @@ export async function compress(
     }
 
     // find the right tool for the job
-    const compress = findCompressionTool(format, false, quality);
+    const compress = findCompressionTool(format, quality);
     if (!compress) {
         throw new Error(`Unsupported compression format: ${format}`);
     }
@@ -167,7 +166,7 @@ export async function compress(
 
     // layout output as ktx
     const { width, height } = input[0];
-    const ktx = storeKTX({ width, height, format, srgb, yflip, data: compressed });
+    const ktx = storeKTX( compressed, { width, height, format, yflipped: yflip });
 
     return ktx;
 }

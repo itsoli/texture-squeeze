@@ -20,15 +20,12 @@ Options:
 
 ${formatList(COMPRESSION_FORMATS, 12)}
 
-    --srgb
-        Use sRGB color space if available for format.
-
     --quality QUALITY
         A float value between 0 (fastest) and 100 (best quality) controlling the
         quality vs performance trade-off.
 
-    --mipmaps
-        Enable generation of mipmap levels.
+    --no-mipmaps
+        Disable generation of mipmap levels.
 
     --filter
         Interpolation filter to use when resizing. Available filters are:
@@ -59,7 +56,8 @@ function parseArguments(argv: string[]): [input: string[], output: string, optio
 
     const args = minimist(argv, {
         string: ['format', 'quality', 'filter'],
-        boolean: ['srgb', 'mipmaps', 'pot', 'square', 'yflip', 'verbose', 'help'],
+        boolean: ['mipmaps', 'pot', 'square', 'yflip', 'verbose', 'help'],
+        default: { mipmaps: true },
         alias: { h: 'help', v: 'verbose' },
         unknown: (arg: string) => {
             if (arg.startsWith('-')) {
@@ -85,7 +83,7 @@ function parseArguments(argv: string[]): [input: string[], output: string, optio
     const input = files.slice(0, -1);
     const [output] = files.slice(-1);
 
-    const { format, srgb, mipmaps, filter, pot, square, yflip, verbose } = args;
+    const { format, mipmaps, filter, pot, square, yflip, verbose } = args;
 
     if (format === undefined) {
         throw new Error('Missing compression format');
@@ -111,7 +109,7 @@ function parseArguments(argv: string[]): [input: string[], output: string, optio
     return [
         input,
         output,
-        { format, srgb, quality, mipmaps, filter, pot, square, yflip, verbose, flags },
+        { format, quality, mipmaps, filter, pot, square, yflip, verbose, flags },
     ];
 }
 

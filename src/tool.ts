@@ -11,7 +11,6 @@ export type CompressionTool = (
 
 export type CompressionToolFactoryFunction = (
     format: CompressionFormat,
-    srgb: boolean,
     quality: number,
     flags?: string[]
 ) => CompressionTool | undefined;
@@ -24,12 +23,11 @@ export function registerCompressionTool(name: string, factory: CompressionToolFa
 
 export function findCompressionTool(
     format: CompressionFormat,
-    srgb: boolean,
     quality: number,
     flags?: string[]
 ): CompressionTool | undefined {
     for (const [, factory] of registeredTools) {
-        const tool = factory(format, srgb, quality, flags);
+        const tool = factory(format, quality, flags);
         if (tool) {
             return tool;
         }

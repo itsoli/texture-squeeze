@@ -40,13 +40,13 @@ function compress(file, format, quality) {
 
 const tasks = [
     ['backstein.jpg', 'ASTC_4x4', 50],
-    ['backstein.jpg', 'ETC1', 50],
-    ['backstein.jpg', 'ETC2', 50],
-    ['backstein.jpg', 'DXT1', 50],
+    ['backstein.jpg', 'ETC_R8G8B8', 50],
+    ['backstein.jpg', 'ETC2_R8G8B8', 50],
+    ['backstein.jpg', 'BC1', 50],
 
     ['moewe.png', 'ASTC_4x4', 50],
-    ['moewe.png', 'ETC2A', 50],
-    ['moewe.png', 'DXT5', 50],
+    ['moewe.png', 'ETC2_R8G8B8A8', 50],
+    ['moewe.png', 'BC3', 50],
 ];
 
 tasks.reduce((p, task) => p.then(() => compress(...task)).catch(() => {}) , Promise.resolve());

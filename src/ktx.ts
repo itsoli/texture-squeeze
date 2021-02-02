@@ -2,7 +2,7 @@ import fs from 'fs';
 import { BufferReader } from './buffer-reader';
 import { BufferWriter } from './buffer-writer';
 
-import { CompressionFormat, toGLBaseInternalFormat, toGLInternalFormat } from './format';
+import { CompressionFormat, GLPixelFormat, toGLPixelFormat } from './format';
 import { calcNumMipmapLevels, pad4 } from './util';
 
 /** identifier + header elements (not including key value meta-data pairs) */
@@ -32,7 +32,7 @@ const GL_MAX_TEXTURE_SIZE = 16384;
 const GL_MAX_3D_TEXTURE_SIZE = 2048;
 const GL_MAX_ARRAY_TEXTURE_LAYERS = 2048;
 
-export type GLPixelFormat = {
+export type KTXContainer = {
     /** `type` parameter passed to `gl.Tex{,Sub}Image*D` (must be 0 for compressed textures) */
     glType: number;
     /** data type size (must be 1 for compressed textures) */
@@ -43,9 +43,6 @@ export type GLPixelFormat = {
     glInternalFormat: number;
     /** base internal format of the texture (`gl.RGB`, `gl.RGBA`, `gl.ALPHA`, etc) */
     glBaseInternalFormat: number;
-};
-
-export type KTXContainer = GLPixelFormat & {
     /** width of the texture at level 0 in pixels */
     pixelWidth: number;
     /** height of the texture at level 0 in pixels (must be 0 for 1D textures) */
@@ -78,13 +75,15 @@ function keyAndValueByteSize(key: string, value: string): number {
     return pad4(4 + key.length + value.length + 2);
 }
 
-type Input = {
-    width: number;
-    height: number;
+export type DataDescriptor = {
     format: CompressionFormat;
-    srgb: boolean;
-    yflip: boolean;
-    data: Buffer[];
+    width: number;
+    height?: number;
+    depth?: number;
+    levels?: number;
+    layers?: number;
+    faces?: number;
+    yflipped?: boolean;
 };
 
 type Output = { container: KTXContainer; buffer: Buffer };
@@ -93,9 +92,22 @@ type Output = { container: KTXContainer; buffer: Buffer };
  * Stores given image data into a buffer formatted as KTX.
  * Image data of the container points to slices of the underlying buffer memory.
  */
-export function storeKTX({ width, height, format, srgb, yflip, data }: Input): Output {
+export function storeKTX(data: Buffer[], descriptor: DataDescriptor): Output {
+    const {
+        format,
+        width,
+        height = 0,
+        depth = 0,
+        levels = data.length,
+        layers = 0,
+        faces = 1,
+        yflipped = false,
+    } = descriptor;
+
+    // TODO: input validation
+
     const keyValuePairs = new Map<string, string>();
-    keyValuePairs.set('KTXorientation', `S=r,T=${yflip ? 'u' : 'd'}`);
+    keyValuePairs.set('KTXorientation', `S=r,T=${yflipped ? 'u' : 'd'}`);
 
     const bytesOfKeyValueData = [...keyValuePairs.entries()].reduce(
         (len, [key, val]) => len + keyAndValueByteSize(key, val),
@@ -106,17 +118,15 @@ export function storeKTX({ width, height, format, srgb, yflip, data }: Input): O
     const buffer = Buffer.alloc(KTX_HEADER_LENGTH + bytesOfKeyValueData + bytesOfImageData);
     const writer = new BufferWriter(buffer);
 
+    const glFormat = toGLPixelFormat(format);
+
     const container: KTXContainer = {
-        glType: 0,
-        glTypeSize: 1,
-        glFormat: 0,
-        glInternalFormat: toGLInternalFormat(format, srgb),
-        glBaseInternalFormat: toGLBaseInternalFormat(format),
+        ...glFormat,
         pixelWidth: width,
         pixelHeight: height,
-        pixelDepth: 0,
-        numberOfArrayElements: 0,
-        numberOfFaces: 1,
+        pixelDepth: depth,
+        numberOfArrayElements: layers,
+        numberOfFaces: faces,
         numberOfMipmapLevels: data.length,
         bytesOfKeyValueData,
         keyValuePairs,

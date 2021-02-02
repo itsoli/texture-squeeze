@@ -20,9 +20,21 @@ function getQualityProfileName(value: number): string {
     return 'uber';
 }
 
+function getCrunchFormat(format: CompressionFormat): string | undefined {
+    const formatMap: { [key in string]?: string } = {
+        'ETC_R8G8B8': 'ETC1',
+        'ETC2_R8G8B8': 'ETC2',
+        'ETC2_R8G8B8A8': 'ETC2A',
+        'BC1': 'DXT1',
+        'BC1_ALPHA': 'DXT1A',
+        'BC2': 'DXT3',
+        'BC3': 'DXT5',
+    };
+    return formatMap[format];
+}
+
 function crunch(
     format: CompressionFormat,
-    _srgb: boolean,
     quality: number,
     flags: string[] = []
 ): CompressionTool | undefined {
@@ -35,7 +47,7 @@ function crunch(
     const args = [
         '-fileformat',
         'ktx',
-        `-${format}`,
+        `-${getCrunchFormat(format)}`,
         '-dxtQuality',
         getQualityProfileName(quality),
         ...flags,

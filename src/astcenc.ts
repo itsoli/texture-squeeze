@@ -22,13 +22,19 @@ function getQualityProfileName(value: number): string {
 
 function astcenc(
     format: CompressionFormat,
-    srgb: boolean,
     quality: number,
     flags: string[] = []
 ): CompressionTool | undefined {
     if (!isASTCFormat(format)) {
         return undefined;
     }
+
+    // parse format
+    const m = format.match(/ASTC_(\d+x\d+)(_SRGB)?/);
+    if (!m) {
+        return undefined;
+    }
+    const [, blockSize, srgb] = m;
 
     const bin = getBinPath('astcenc-avx2');
 
@@ -37,7 +43,7 @@ function astcenc(
 
     const args = [
         // block size
-        format.slice(5),
+        blockSize,
         // quality preset
         `-${getQualityProfileName(quality)}`,
         // additional argument flags
