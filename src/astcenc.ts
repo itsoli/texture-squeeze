@@ -4,22 +4,6 @@ import { CompressionFormat, isASTCFormat } from './format';
 import { spawnProcess, SpawnProcessOptions } from './spawn-process';
 import { CompressionTool, registerCompressionTool } from './tool';
 
-function getQualityProfileName(value: number): string {
-    if (value <= 0) {
-        return 'fastest';
-    }
-    if (value <= 10) {
-        return 'fast';
-    }
-    if (value <= 60) {
-        return 'medium';
-    }
-    if (value <= 98) {
-        return 'thorough';
-    }
-    return 'exhaustive';
-}
-
 function astcenc(
     format: CompressionFormat,
     quality: number,
@@ -36,16 +20,19 @@ function astcenc(
     }
     const [, blockSize, srgb] = m;
 
-    const bin = getBinPath('astcenc-avx2');
+    // validate quality
+    quality = Number.isFinite(quality) ? Math.max(0, Math.min(100, quality)) : 100
 
     // compression color profile
     const colorProfileFlag = `-c${srgb ? 's' : 'l'}`;
+
+    const bin = getBinPath('astcenc-avx2');
 
     const args = [
         // block size
         blockSize,
         // quality preset
-        `-${getQualityProfileName(quality)}`,
+        quality.toFixed(1),
         // additional argument flags
         ...flags,
     ];
