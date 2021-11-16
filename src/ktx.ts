@@ -2,7 +2,7 @@ import fs from 'fs';
 import { BufferReader } from './buffer-reader';
 import { BufferWriter } from './buffer-writer';
 
-import { CompressionFormat, GLPixelFormat, toGLPixelFormat } from './format';
+import { CompressionFormat, toGLPixelFormat } from './format';
 import { calcNumMipmapLevels, pad4 } from './util';
 
 /** identifier + header elements (not including key value meta-data pairs) */
@@ -127,7 +127,7 @@ export function storeKTX(data: Buffer[], descriptor: DataDescriptor): Output {
         pixelDepth: depth,
         numberOfArrayElements: layers,
         numberOfFaces: faces,
-        numberOfMipmapLevels: data.length,
+        numberOfMipmapLevels: levels,
         bytesOfKeyValueData,
         keyValuePairs,
         imageData: [],
