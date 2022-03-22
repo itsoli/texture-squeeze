@@ -15,9 +15,10 @@ function getPlatform(): 'linux' | 'macos' | 'windows' {
     }
 }
 
-function getArchitecture(): 'x64' {
+function getArchitecture(): 'arm64' | 'x64' {
     const arch = os.arch();
     switch (arch) {
+        case 'arm64':
         case 'x64':
             return arch;
         default:
@@ -25,10 +26,16 @@ function getArchitecture(): 'x64' {
     }
 }
 
+const SUPPORTED_TARGETS = ['linux-x64', 'macos-arm64', 'macos-x64', 'windows-x64'];
+
 export function getBinPath(binary: string, base: string = `${__dirname}/../bin`): string {
     const platform = getPlatform();
     const arch = getArchitecture();
-    let binpath = `${base}/${platform}-${arch}/${binary}`;
+    const target = `${platform}-${arch}`;
+    if (!SUPPORTED_TARGETS.includes(target)) {
+        throw new Error(`Unsupported target: ${target}`);
+    }
+    let binpath = `${base}/${target}/${binary}`;
     if (platform === 'windows') {
         binpath += '.exe';
     }
