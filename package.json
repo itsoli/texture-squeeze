@@ -1,6 +1,6 @@
 {
   "name": "texture-squeeze",
-  "version": "0.5.6",
+  "version": "0.6.0",
   "description": "Compress textures into GPU friendly formats",
   "keywords": [
     "texture",
