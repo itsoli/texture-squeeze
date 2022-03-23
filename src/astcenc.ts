@@ -26,7 +26,8 @@ function astcenc(
     // compression color profile
     const colorProfileFlag = `-c${srgb ? 's' : 'l'}`;
 
-    const bin = getBinPath('astcenc-avx2');
+    const simd = process.arch === 'arm64' ? 'neon' : 'avx2';
+    const bin = getBinPath(`astcenc-${simd}`);
 
     const args = [
         // block size
