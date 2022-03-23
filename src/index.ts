@@ -162,7 +162,7 @@ export async function compress(
     }
 
     // clean up temp dir
-    await fs.promises.rmdir(tmpDir, { recursive: true });
+    await fs.promises.rm(tmpDir, { recursive: true });
 
     // layout output as ktx
     const { width, height } = input[0];
