@@ -99,7 +99,7 @@ function parseArguments(argv: string[]): [input: string[], output: string, optio
     let { quality } = args;
     if (quality !== undefined) {
         quality = Number.parseFloat(quality);
-        if (quality === NaN || quality < 0 || quality > 100) {
+        if (!Number.isFinite(quality) || quality < 0 || quality > 100) {
             throw new Error(`Not a valid quality value: ${args.quality}`);
         }
     }
